@@ -129,6 +129,11 @@ def game_loop():
 
         move_player(command)
 
+        # Botsing controleren voordat tegenstanders bewegen
+        if check_collision():
+            game_over = True
+            break
+
         # Auto's bewegen
         move_cars()
 
