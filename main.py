@@ -1,6 +1,7 @@
 import random
 import os
 import time
+import msvcrt
 
 
 # Instellingen
@@ -13,6 +14,7 @@ player_row = ROAD_HEIGHT - 2
 
 # Tegenstanders
 cars = []
+recent_car_lanes = []
 
 score = 0
 game_over = False
@@ -23,13 +25,24 @@ def clear_screen():
 
 
 def create_car():
-    lane = random.randint(0, LANES - 1)
+    available_lanes = list(range(LANES))
+
+    if len(recent_car_lanes) == 2 and recent_car_lanes[0] != recent_car_lanes[1]:
+        blocked_lane = next(
+            lane for lane in available_lanes
+            if lane not in recent_car_lanes
+        )
+        available_lanes.remove(blocked_lane)
+
+    lane = random.choice(available_lanes)
     row = 0
 
     cars.append({
         "lane": lane,
         "row": row
     })
+    recent_car_lanes.append(lane)
+    del recent_car_lanes[:-2]
 
 
 def move_cars():
@@ -84,12 +97,12 @@ def draw_road():
 
             # Speler
             if lane == player_lane and row == player_row:
-                symbol = "🚗"
+                symbol = "🚗 "
 
             # Tegenstanders
             for car in cars:
                 if car["lane"] == lane and car["row"] == row:
-                    symbol = "🚙"
+                    symbol = "🚙 "
 
             # Zorg dat de rijbaan 3 tekens breed blijft
             if symbol == " ":
@@ -114,6 +127,13 @@ def move_player(command):
             player_lane += 1
 
 
+def read_command():
+    if msvcrt.kbhit():
+        return msvcrt.getwch().lower()
+
+    return ""
+
+
 def game_loop():
     global game_over
 
@@ -121,7 +141,7 @@ def game_loop():
 
         draw_road()
 
-        command = input("\nBeweging: ").lower()
+        command = read_command()
 
         if command == "q":
             game_over = True
@@ -154,6 +174,8 @@ def game_loop():
     print("=" * 25)
     print("       💥 CRASH!")
     print("=" * 25)
+
+
     print()
     print(f"🏁 Eindscore: {score}")
     print()
