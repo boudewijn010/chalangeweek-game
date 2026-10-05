@@ -72,7 +72,9 @@ def remove_cars():
     cars.extend(remaining_cars)
 
 
-def check_collision():
+def check_collision()-> bool:
+    '''
+    Controleert of de speler een botsing heeft met een tegenstander.'''
     for car in cars:
         if car["lane"] == player_lane and car["row"] == player_row:
             return True
