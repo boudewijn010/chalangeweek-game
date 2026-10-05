@@ -1,7 +1,14 @@
 import random
 import os
 import time
-import msvcrt
+
+try:
+    import msvcrt
+except ImportError:
+    import select
+    import sys
+    import termios
+    import tty
 
 
 # Instellingen
@@ -128,46 +135,67 @@ def move_player(command):
 
 
 def read_command():
-    if msvcrt.kbhit():
+    if os.name == "nt" and msvcrt.kbhit():
         return msvcrt.getwch().lower()
 
+    if os.name != "nt" and select.select([sys.stdin], [], [], 0)[0]:
+        return sys.stdin.read(1).lower()
+
     return ""
+
+
+def enable_keyboard_input():
+    if os.name != "nt":
+        terminal_settings = termios.tcgetattr(sys.stdin)
+        tty.setcbreak(sys.stdin.fileno())
+        return terminal_settings
+
+    return None
+
+
+def disable_keyboard_input(terminal_settings):
+    if os.name != "nt" and terminal_settings is not None:
+        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, terminal_settings)
 
 
 def game_loop():
     global game_over
 
-    while not game_over:
+    terminal_settings = enable_keyboard_input()
+    try:
+        while not game_over:
 
-        draw_road()
+            draw_road()
 
-        command = read_command()
+            command = read_command()
 
-        if command == "q":
-            game_over = True
-            break
+            if command == "q":
+                game_over = True
+                break
 
-        move_player(command)
+            move_player(command)
 
-        # Botsing controleren voordat tegenstanders bewegen
-        if check_collision():
-            game_over = True
-            break
+            # Botsing controleren voordat tegenstanders bewegen
+            if check_collision():
+                game_over = True
+                break
 
-        # Auto's bewegen
-        move_cars()
+            # Auto's bewegen
+            move_cars()
 
-        # Soms komt er een nieuwe auto
-        if random.randint(1, 100) <= 50:
-            create_car()
+            # Soms komt er een nieuwe auto
+            if random.randint(1, 100) <= 50:
+                create_car()
 
-        # Botsing controleren
-        if check_collision():
-            game_over = True
+            # Botsing controleren
+            if check_collision():
+                game_over = True
 
-        remove_cars()
+            remove_cars()
 
-        time.sleep(0.2)
+            time.sleep(0.2)
+    finally:
+        disable_keyboard_input(terminal_settings)
 
     clear_screen()
 
