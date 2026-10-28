@@ -441,6 +441,14 @@ class Game:
                 else:            # AI rijdt op speler
                     a.speed = min(a.speed, p.speed * 0.8)
                     a.dist = p.dist - 500
+                # Keep the cars separated after resolving a collision. This
+                # prevents the same pair from being resolved repeatedly while
+                # their positions are still overlapping.
+                if abs(self.signed(a.dist - p.dist)) < 500:
+                    if dz > 0:
+                        p.dist = a.dist - 500
+                    else:
+                        a.dist = p.dist - 500
 
     def check_laps(self):
         L = self.track.length
@@ -556,6 +564,8 @@ class Game:
             s1, s2 = seg.s1, seg.s2
             cars_here = buckets.get(seg.index)
             if not seg.props and not cars_here and seg.index != 0:
+                continue
+            if s1 is None or s2 is None:
                 continue
             scr.set_clip((0, 0, W, max(0, int(seg.clip))))
             if s1[4] > 200:
