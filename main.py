@@ -437,18 +437,10 @@ class Game:
                 self.shake = 0.25
                 if dz > 0:       # speler rijdt achterop
                     p.speed = min(p.speed, a.speed * 0.8)
-                    p.dist = a.dist - 500
+                    p.dist = a.dist - 520
                 else:            # AI rijdt op speler
                     a.speed = min(a.speed, p.speed * 0.8)
-                    a.dist = p.dist - 500
-                # Keep the cars separated after resolving a collision. This
-                # prevents the same pair from being resolved repeatedly while
-                # their positions are still overlapping.
-                if abs(self.signed(a.dist - p.dist)) < 500:
-                    if dz > 0:
-                        p.dist = a.dist - 500
-                    else:
-                        a.dist = p.dist - 500
+                    a.dist = p.dist - 520
 
     def check_laps(self):
         L = self.track.length
