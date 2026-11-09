@@ -1,4 +1,3 @@
-import array
 import math
 import random
 import sys
@@ -113,93 +112,6 @@ def make_vignette(color, strength):
             a = int(255 * strength * clamp((d - 0.5) / 0.55, 0, 1) ** 2)
             small.set_at((x, y), (*color, a))
     return pygame.transform.smoothscale(small, (W, H))
-
-
-# --------------------------------------------------------------------------
-# Sound (fully synthesized)
-# --------------------------------------------------------------------------
-SR = 44100
-
-
-def _tone(freq, dur, decay=3.0, square=False, vol=0.5):
-    n = int(SR * dur)
-    out = []
-    for i in range(n):
-        t = i / SR
-        s = math.sin(2 * math.pi * freq * t)
-        if square:
-            s = 1.0 if s > 0 else -1.0
-        out.append(s * math.exp(-decay * i / n) * vol)
-    return out
-
-
-def _noise(dur, decay=6.0, lp=0.5, vol=0.8, swell=False):
-    n = int(SR * dur)
-    out, y = [], 0.0
-    for i in range(n):
-        y += (random.uniform(-1, 1) - y) * lp
-        env = math.sin(math.pi * i / n) ** 0.6 if swell else math.exp(-decay * i / n)
-        out.append(y * env * vol)
-    return out
-
-
-def _engine(freq, dur=0.25):
-    n = int(SR * dur)
-    out = []
-    for i in range(n):
-        t = i / SR
-        s = sum(math.sin(2 * math.pi * k * freq * t) / k for k in (1, 2, 3, 4))
-        out.append(s * 0.18)
-    return out
-
-
-class Sfx:
-    def __init__(self):
-        self.ok = False
-        self.muted = False
-        self.snd = {}
-        self.eng_snd = []
-        self.eng_band = -1
-        try:
-            if not pygame.mixer.get_init():
-                pygame.mixer.init(SR, -16, 1, 512)
-            self.channels = pygame.mixer.get_init()[2]
-            pygame.mixer.set_reserved(1)
-            self.eng = pygame.mixer.Channel(0)
-            self.snd["beep"] = self._mk(_tone(880, 0.16, 4))
-            self.snd["go"] = self._mk(_tone(1320, 0.45, 3, True, 0.35))
-            self.snd["crash"] = self._mk(_noise(0.45, 9, 0.35, 1.0))
-            self.snd["lap"] = self._mk(_tone(880, 0.12, 2) + _tone(1175, 0.25, 3))
-            self.snd["fin"] = self._mk(_tone(523, 0.14, 2) + _tone(659, 0.14, 2) + _tone(784, 0.14, 2)
-                                       + _tone(1047, 0.5, 3))
-            self.eng_snd = [self._mk(_engine(f), 0.7) for f in (60, 80, 100, 120, 160)]
-            self.ok = True
-        except Exception:
-            self.ok = False
-
-    def _mk(self, samples, vol=1.0):
-        data = [int(clamp(s, -1, 1) * 32000 * vol) for s in samples]
-        if self.channels == 2:
-            data = [v for v in data for _ in (0, 1)]
-        return pygame.mixer.Sound(buffer=array.array("h", data).tobytes())
-
-    def play(self, name):
-        if self.ok and not self.muted:
-            self.snd[name].play()
-
-    def engine(self, active, ratio):
-        if not self.ok:
-            return
-        if not active or self.muted:
-            if self.eng_band != -1:
-                self.eng.stop()
-                self.eng_band = -1
-            return
-        band = min(4, int(ratio * 5))
-        if band != self.eng_band or not self.eng.get_busy():
-            self.eng.play(self.eng_snd[band], loops=-1)
-            self.eng_band = band
-        self.eng.set_volume(0.10 + 0.26 * ratio)
 
 
 # --------------------------------------------------------------------------
@@ -450,7 +362,6 @@ class Particle:
 # --------------------------------------------------------------------------
 class Game:
     def __init__(self):
-        pygame.mixer.pre_init(SR, -16, 1, 512)
         pygame.init()
         pygame.display.set_caption("Turbo Racer 3D - ULTRA")
         self.screen = pygame.display.set_mode((W, H))
@@ -460,7 +371,6 @@ class Game:
         self.f_num = pygame.font.Font(None, 62)
         self.f_med = pygame.font.Font(None, 36)
         self.f_small = pygame.font.Font(None, 26)
-        self.sfx = Sfx()
         self.points = {}
         self.race_no = 1
         self.paused = False
@@ -621,13 +531,10 @@ class Game:
             n = int(self.cd) + 1 if self.cd > 0 else 0
             if n != self.last_cd:
                 self.last_cd = n
-                if 1 <= n <= 3:
-                    self.sfx.play("beep")
             if self.cd <= 0:
                 self.state = "racing"
                 self.race_time = 0.0
                 self.go_timer = 1.0
-                self.sfx.play("go")
             return
         self.race_time += dt
         self.go_timer = max(0.0, self.go_timer - dt)
@@ -745,7 +652,6 @@ class Game:
                 hit = True
             if hit:
                 self.shake = 0.25
-                self.sfx.play("crash")
                 px, py, pw = self.player_screen
                 for _ in range(26):
                     ang = random.uniform(0, math.tau)
@@ -770,7 +676,6 @@ class Game:
                         self.say(f"LAP {laps + 1}/{TOTAL_LAPS}", (255, 255, 255))
                     if laps == TOTAL_LAPS - 1:
                         self.say("FINAL LAP!", (255, 90, 90))
-                    self.sfx.play("lap")
                 if c.player:
                     self.lap_start = self.race_time
                 if laps >= TOTAL_LAPS and c.finish_time is None:
@@ -785,8 +690,6 @@ class Game:
             pts = POINTS[i]
             self.points[c.name] = self.points.get(c.name, 0) + pts
             self.race_points[c.name] = pts
-        self.sfx.play("fin")
-
     def update_particles(self, dt):
         for p in self.parts:
             p.life -= dt
@@ -794,11 +697,6 @@ class Game:
             p.x += p.vx * dt
             p.y += p.vy * dt
         self.parts = [p for p in self.parts if p.life > 0 and p.y < H + 40]
-
-    def update_audio(self):
-        p = self.player
-        active = self.state in ("countdown", "racing", "finished") and not self.paused
-        self.sfx.engine(active, clamp(p.speed / (MAX_SPEED * SLIP_MULT), 0, 1))
 
     # ---- drawing ---------------------------------------------------------
     def text(self, s, font, color, pos, anchor="topleft", shadow=True):
@@ -1084,7 +982,7 @@ class Game:
                 self.screen.blit(img, img.get_rect(midtop=(cx + off[0], 120 + off[1])))
             self.text("ULTRA EDITION", self.f_med, (255, 255, 255), (cx, 196), "midtop")
             self.text(f"{RACES} races  -  {TOTAL_LAPS} laps  -  4 opponents", self.f_med, (190, 215, 255), (cx, 236), "midtop")
-            lines = ["Arrows / WASD: accelerate, brake and steer", "M: sound",
+            lines = ["Arrows / WASD: accelerate, brake and steer",
                      "Stay close behind other cars to catch their slipstream!",
                      "P: pause     R: restart     ESC: quit"]
             for i, l in enumerate(lines):
@@ -1182,7 +1080,6 @@ class Game:
                 if self.race_no >= RACES:
                     self.state = "champion"
                     self.parts = []
-                    self.sfx.play("fin")
                 else:
                     self.race_no += 1
                     self.start_race()
@@ -1193,8 +1090,6 @@ class Game:
             self.start_race()
         elif key == pygame.K_p and self.state in ("racing", "countdown"):
             self.paused = not self.paused
-        elif key == pygame.K_m:
-            self.sfx.muted = not self.sfx.muted
 
     def run(self):
         while True:
@@ -1210,7 +1105,6 @@ class Game:
             inp = Inp(k[pygame.K_UP] or k[pygame.K_w], k[pygame.K_DOWN] or k[pygame.K_s],
                       k[pygame.K_LEFT] or k[pygame.K_a], k[pygame.K_RIGHT] or k[pygame.K_d])
             self.update(dt, inp)
-            self.update_audio()
             self.draw()
             pygame.display.flip()
 
