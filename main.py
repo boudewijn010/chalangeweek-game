@@ -1,33 +1,3 @@
-#!/usr/bin/env python3
-"""
-TURBO RACER 3D  -  ULTRA EDITIE
--------------------------------
-Pseudo-3D racegame met pygame. Alles (grafiek EN geluid) wordt met code
-gemaakt, je hebt geen plaatjes of geluidsbestanden nodig.
-
-Nieuw t.o.v. de originele versie:
-  * NITRO (SPATIE / SHIFT) met meter, vlammen en snelheidslijnen
-  * BOOST-PADS op de baan: rij erover voor een gratis boost
-  * SLIPSTREAM: rij achter een tegenstander voor extra snelheid
-  * KAMPIOENSCHAP over 3 races, elke race een ander thema:
-      Gouden Uur  -  Neon Nacht (koplampen, skyline)  -  Woestijn
-    (race 2 wordt bovendien gespiegeld gereden)
-  * Mist, zon/maan/sterren, bergen, skyline, lantaarns, reclameborden, palmen
-  * Deeltjes: vlammen, stof, vonken, confetti
-  * Synthgeluid: motor, nitro, botsing, afteltonen (M = geluid uit)
-  * Minimap, toerenteller-achtige snelheidsmeter, meldingen, vignet
-
-Starten:   pip install pygame   &&   python turbo_racer_3d_ultra.py
-
-Besturing:
-    Pijltjes / WASD  : gas, remmen, sturen
-    SPATIE / SHIFT   : nitro
-    ENTER            : start / volgende race
-    R                : race opnieuw
-    P                : pauze
-    M                : geluid aan/uit
-    ESC              : afsluiten
-"""
 import array
 import math
 import random
@@ -37,7 +7,7 @@ from typing import Optional
 import pygame
 
 # --------------------------------------------------------------------------
-# Instellingen
+# Settings
 # --------------------------------------------------------------------------
 W, H = 1024, 640
 FPS = 60
@@ -53,7 +23,7 @@ DRAW_DIST = 220
 RUMBLE_LEN = 4
 
 MAX_SPEED = 12000.0
-BOOST_MULT = 1.30
+SLIP_MULT = 1.05
 ACCEL = MAX_SPEED / 3
 BRAKE = -MAX_SPEED
 DECEL = -MAX_SPEED / 3
@@ -67,24 +37,24 @@ RACES = 3
 POINTS = [10, 7, 5, 3, 1]
 M_PER_UNIT = 0.00648
 KMH = 280.0 / MAX_SPEED
-KMH_MAX = 280.0 * BOOST_MULT
+KMH_MAX = 280.0 * SLIP_MULT
 
 THEMES = [
-    dict(name="GOUDEN UUR", sky_top=(28, 60, 150), sky_bot=(255, 175, 105),
+    dict(name="GOLDEN HOUR", sky_top=(28, 60, 150), sky_bot=(255, 175, 105),
          sun=(255, 230, 160), sun_pos=(0.70, 0.66), sun_r=62,
          mount=(135, 95, 150), hill=(48, 105, 78),
          grass=((26, 152, 62), (16, 128, 52)), road=((114, 114, 122), (104, 104, 112)),
          rumble=((212, 40, 40), (240, 240, 240)), lane=(228, 228, 228),
          night=False, stars=False, neon=False, skyline=False,
          trees="pine", clouds=(255, 218, 196)),
-    dict(name="NEON NACHT", sky_top=(6, 3, 38), sky_bot=(185, 35, 165),
+    dict(name="NEON NIGHT", sky_top=(6, 3, 38), sky_bot=(185, 35, 165),
          sun=(255, 90, 205), sun_pos=(0.50, 0.60), sun_r=92,
          mount=(58, 20, 110), hill=(26, 12, 62),
          grass=((22, 10, 54), (15, 6, 42)), road=((46, 46, 66), (38, 38, 58)),
          rumble=((0, 232, 255), (255, 44, 205)), lane=(255, 240, 120),
          night=True, stars=True, neon=True, skyline=True,
          trees="neon", clouds=None),
-    dict(name="WOESTIJN", sky_top=(38, 128, 230), sky_bot=(252, 236, 202),
+    dict(name="DESERT", sky_top=(38, 128, 230), sky_bot=(252, 236, 202),
          sun=(255, 252, 225), sun_pos=(0.25, 0.30), sun_r=44,
          mount=(205, 150, 118), hill=(196, 142, 92),
          grass=((228, 188, 112), (212, 172, 96)), road=((124, 112, 106), (112, 102, 98)),
@@ -95,7 +65,7 @@ THEMES = [
 
 
 # --------------------------------------------------------------------------
-# Hulpfuncties
+# Helpers
 # --------------------------------------------------------------------------
 def lerp(a, b, t):
     return a + (b - a) * t
@@ -124,7 +94,7 @@ def fmt_time(t):
 
 
 def project(wx, wy, wz, camx, camy, camz):
-    """Wereldpunt -> (scherm_x, scherm_y, scherm_wegbreedte, schaal, cam_z)."""
+    """World point -> (screen_x, screen_y, screen_road_width, scale, cam_z)."""
     cx, cy, cz = wx - camx, wy - camy, wz - camz
     scale = CAM_DEPTH / max(cz, 1e-3)
     return (W / 2 + scale * cx * W / 2,
@@ -146,7 +116,7 @@ def make_vignette(color, strength):
 
 
 # --------------------------------------------------------------------------
-# Geluid (volledig gesynthetiseerd)
+# Sound (fully synthesized)
 # --------------------------------------------------------------------------
 SR = 44100
 
@@ -199,8 +169,6 @@ class Sfx:
             self.snd["beep"] = self._mk(_tone(880, 0.16, 4))
             self.snd["go"] = self._mk(_tone(1320, 0.45, 3, True, 0.35))
             self.snd["crash"] = self._mk(_noise(0.45, 9, 0.35, 1.0))
-            self.snd["boost"] = self._mk(_noise(0.8, lp=0.18, vol=1.0, swell=True))
-            self.snd["pad"] = self._mk(_tone(660, 0.07, 2) + _tone(880, 0.07, 2) + _tone(1320, 0.16, 3))
             self.snd["lap"] = self._mk(_tone(880, 0.12, 2) + _tone(1175, 0.25, 3))
             self.snd["fin"] = self._mk(_tone(523, 0.14, 2) + _tone(659, 0.14, 2) + _tone(784, 0.14, 2)
                                        + _tone(1047, 0.5, 3))
@@ -219,7 +187,7 @@ class Sfx:
         if self.ok and not self.muted:
             self.snd[name].play()
 
-    def engine(self, active, ratio, boosting):
+    def engine(self, active, ratio):
         if not self.ok:
             return
         if not active or self.muted:
@@ -231,14 +199,14 @@ class Sfx:
         if band != self.eng_band or not self.eng.get_busy():
             self.eng.play(self.eng_snd[band], loops=-1)
             self.eng_band = band
-        self.eng.set_volume(0.10 + 0.26 * ratio + (0.10 if boosting else 0.0))
+        self.eng.set_volume(0.10 + 0.26 * ratio)
 
 
 # --------------------------------------------------------------------------
-# Sprites (alles met code getekend)
+# Sprites (all drawn with code)
 # --------------------------------------------------------------------------
-def draw_car(surf, cx, by, w, color, flame=0.0, neon=False, braking=False):
-    """Auto van achteren gezien. (cx, by) = midden onderkant, w = breedte in px."""
+def draw_car(surf, cx, by, w, color, neon=False, braking=False):
+    """Car seen from behind. (cx, by) = bottom center, w = width in px."""
     if w < 2 or w > W * 0.9:
         return
     cx, by, w = int(cx), int(by), int(w)
@@ -248,7 +216,7 @@ def draw_car(surf, cx, by, w, color, flame=0.0, neon=False, braking=False):
         return
     dark = tuple(int(c * 0.55) for c in color)
     light = mix(color, (255, 255, 255), 0.35)
-    if neon:  # onderverlichting
+    if neon:  # underglow
         glow = mix(color, (255, 255, 255), 0.25)
         pygame.draw.ellipse(surf, mix(glow, (0, 0, 0), 0.35),
                             (cx - int(w * 0.72), by - int(h * 0.26), int(w * 1.44), int(h * 0.5)))
@@ -256,12 +224,12 @@ def draw_car(surf, cx, by, w, color, flame=0.0, neon=False, braking=False):
     else:
         pygame.draw.ellipse(surf, (28, 28, 28),
                             (cx - int(w * 0.55), by - int(h * 0.14), int(w * 1.1), int(h * 0.28)))
-    # carrosserie
+    # body
     pygame.draw.rect(surf, color, (cx - w // 2, by - int(h * 0.62), w, int(h * 0.5)),
                      border_radius=max(2, w // 14))
     pygame.draw.rect(surf, light, (cx - w // 2 + 2, by - int(h * 0.62), w - 4, max(1, int(h * 0.07))),
                      border_radius=2)
-    # cabine + raam
+    # cabin + window
     top = by - h
     pygame.draw.polygon(surf, dark, [(cx - w * 0.38, by - h * 0.6), (cx - w * 0.27, top),
                                      (cx + w * 0.27, top), (cx + w * 0.38, by - h * 0.6)])
@@ -272,11 +240,11 @@ def draw_car(surf, cx, by, w, color, flame=0.0, neon=False, braking=False):
     pygame.draw.rect(surf, dark, (cx + int(w * 0.26), by - int(h * 0.72), max(1, int(w * 0.05)), int(h * 0.12)))
     pygame.draw.rect(surf, color, (cx - int(w * 0.46), by - int(h * 0.76), int(w * 0.92), max(2, int(h * 0.08))),
                      border_radius=2)
-    # wielen
+    # wheels
     ww, wh = max(2, int(w * 0.15)), max(2, int(h * 0.4))
     pygame.draw.rect(surf, (18, 18, 18), (cx - w // 2 - ww // 3, by - wh, ww, wh), border_radius=2)
     pygame.draw.rect(surf, (18, 18, 18), (cx + w // 2 - ww + ww // 3, by - wh, ww, wh), border_radius=2)
-    # achterlichten + kenteken
+    # tail lights + license plate
     lw, lh = max(2, int(w * 0.2)), max(2, int(h * 0.12))
     ly = by - int(h * 0.52)
     if braking:
@@ -285,14 +253,6 @@ def draw_car(surf, cx, by, w, color, flame=0.0, neon=False, braking=False):
     pygame.draw.rect(surf, (255, 40, 40), (cx - int(w * 0.42), ly, lw, lh))
     pygame.draw.rect(surf, (255, 40, 40), (cx + int(w * 0.42) - lw, ly, lw, lh))
     pygame.draw.rect(surf, (235, 235, 235), (cx - int(w * 0.1), ly, max(2, int(w * 0.2)), lh))
-    # uitlaatvlammen
-    if flame > 0:
-        for sgn in (-1, 1):
-            ex, ey = cx + sgn * int(w * 0.22), by - int(h * 0.14)
-            fl = int(w * random.uniform(0.28, 0.5) * flame)
-            fw = max(2, int(w * 0.07))
-            pygame.draw.polygon(surf, (255, 120, 20), [(ex - fw, ey), (ex + fw, ey), (ex, ey + fl)])
-            pygame.draw.polygon(surf, (255, 235, 130), [(ex - fw // 2, ey), (ex + fw // 2, ey), (ex, ey + fl * 0.6)])
 
 
 def draw_tree(surf, x, by, w, var, kind, f, fogc):
@@ -351,50 +311,11 @@ def draw_lamp(surf, x, by, w, night, f, fogc):
         pygame.draw.rect(surf, mix((90, 90, 100), fogc, f), (x - w // 6, by - h - w // 12, w // 3, max(2, w // 7)))
 
 
-def draw_board(surf, x, by, w, var, f, fogc):
-    if w < 6 or w > 1400:
-        return
-    x, by, w = int(x), int(by), int(w)
-    pals = [((255, 60, 90), (255, 255, 255)), ((40, 160, 255), (255, 230, 60)),
-            ((255, 200, 40), (30, 30, 30)), ((60, 220, 120), (20, 40, 60))]
-    bg, fg = pals[int(var * 4) % 4]
-    bg, fg = mix(bg, fogc, f), mix(fg, fogc, f)
-    bh, legs = int(w * 0.45), int(w * 0.5)
-    pw = max(1, w // 14)
-    post = mix((90, 90, 100), fogc, f)
-    for sx in (-0.3, 0.3):
-        pygame.draw.rect(surf, post, (x + int(w * sx) - pw // 2, by - legs - bh, pw, legs + bh))
-    top = by - legs - bh
-    pygame.draw.rect(surf, bg, (x - w // 2, top, w, bh))
-    pygame.draw.rect(surf, fg, (x - w // 2, top, w, bh), max(1, w // 40))
-    for k in range(3):
-        pygame.draw.rect(surf, fg, (x - w * 0.4, top + bh * (0.18 + 0.27 * k),
-                                    w * (0.8 if k < 2 else 0.5), max(1, bh * 0.12)))
-
-
-def draw_sign(surf, x, by, w, direction):
-    """Waarschuwingsbord voor scherpe bochten (direction: +1 rechts, -1 links)."""
-    if w < 4 or w > 900:
-        return
-    x, by, w = int(x), int(by), int(w)
-    h = int(w * 0.9)
-    pw = max(1, w // 10)
-    pygame.draw.rect(surf, (200, 200, 200), (x - pw // 2, by - h, pw, h))
-    bw, bh = w, int(w * 0.6)
-    top = by - h - bh // 2
-    pygame.draw.rect(surf, (210, 30, 30), (x - bw // 2, top, bw, bh))
-    pygame.draw.rect(surf, (255, 255, 255), (x - bw // 2, top, bw, bh), max(1, w // 14))
-    d = direction
-    pygame.draw.lines(surf, (255, 255, 255), False,
-                      [(x - d * bw * 0.18, top + bh * 0.2), (x + d * bw * 0.18, top + bh * 0.5),
-                       (x - d * bw * 0.18, top + bh * 0.8)], max(1, w // 12))
-
-
 # --------------------------------------------------------------------------
-# Circuit
+# Track
 # --------------------------------------------------------------------------
 class Seg:
-    __slots__ = ("index", "y1", "y2", "curve", "col", "props", "s1", "s2", "clip", "pad", "pad_id")
+    __slots__ = ("index", "y1", "y2", "curve", "col", "props", "s1", "s2", "clip")
 
     def __init__(self, index, y1, y2, curve):
         self.index, self.y1, self.y2, self.curve = index, y1, y2, curve
@@ -402,8 +323,6 @@ class Seg:
         self.props = []
         self.s1 = self.s2 = None
         self.clip = H
-        self.pad = None
-        self.pad_id = -1
 
 
 class Track:
@@ -471,20 +390,6 @@ class Track:
                     seg.props.append((side * 1.28, "lamp", 0.0))
             elif i % 20 == 0 and not th["night"]:
                 seg.props.append((-1.22 if (i // 20) % 2 else 1.22, "lamp", 0.0))
-            if i % 47 == 13:
-                seg.props.append((rng.choice((-1, 1)) * 2.7, "board", rng.random()))
-            if abs(seg.curve) >= 3.5 and i % 6 == 0:
-                outer = -1 if seg.curve > 0 else 1
-                seg.props.append((outer * 1.45, "sign", -outer))
-        # boost-pads
-        rng2 = random.Random(11)
-        count = 12
-        for k in range(count):
-            start = int((k + 0.5 + rng2.uniform(-0.2, 0.2)) * self.n / count)
-            lane = rng2.choice((-0.5, 0.0, 0.5))
-            for j in range(8):
-                s = self.segs[(start + j) % self.n]
-                s.pad, s.pad_id = lane, k
 
     def _map(self):
         n = self.n
@@ -510,7 +415,7 @@ class Track:
 
 
 # --------------------------------------------------------------------------
-# Auto's, input, deeltjes
+# Cars, input, particles
 # --------------------------------------------------------------------------
 class Car:
     def __init__(self, name, color, dist, offset, skill=0.0, player=False):
@@ -523,16 +428,12 @@ class Car:
         self.speed = 0.0
         self.laps_done = -1
         self.finish_time: Optional[float] = None
-        self.nitro = 0.5
-        self.boosting = False
         self.braking = False
-        self.boost_t = 0.0
-        self.last_pad = -1
 
 
 class Inp:
-    def __init__(self, up=False, down=False, left=False, right=False, boost=False):
-        self.up, self.down, self.left, self.right, self.boost = up, down, left, right, boost
+    def __init__(self, up=False, down=False, left=False, right=False):
+        self.up, self.down, self.left, self.right = up, down, left, right
 
 
 class Particle:
@@ -545,7 +446,7 @@ class Particle:
 
 
 # --------------------------------------------------------------------------
-# Spel
+# Game
 # --------------------------------------------------------------------------
 class Game:
     def __init__(self):
@@ -564,11 +465,10 @@ class Game:
         self.race_no = 1
         self.paused = False
         self.t = 0.0
-        self.boost_fx = 0.0
         self.player_screen = (W / 2, H - 100, 300)
         self.new_race()
 
-    # ---- opbouw ----------------------------------------------------------
+    # ---- setup -----------------------------------------------------------
     def new_race(self):
         self.theme = THEMES[(self.race_no - 1) % len(THEMES)]
         th = self.theme
@@ -646,7 +546,6 @@ class Game:
     def _make_overlays(self):
         th = self.theme
         self.vig = make_vignette((0, 0, 0), 0.85 if th["night"] else 0.5)
-        self.vig_boost = make_vignette((40, 140, 255), 0.8)
         self.cone = None
         if th["night"]:
             cone = pygame.Surface((W, H))
@@ -662,15 +561,15 @@ class Game:
             self.cone = cone
 
     def reset(self):
-        specs = [("Daan", (225, 45, 45), 0.93), ("Sanne", (245, 205, 30), 0.90),
-                 ("Ruben", (40, 185, 80), 0.87), ("Fenna", (175, 80, 205), 0.84)]
+        specs = [("Dan", (225, 45, 45), 0.93), ("Sam", (245, 205, 30), 0.90),
+                 ("Ray", (40, 185, 80), 0.87), ("Fay", (175, 80, 205), 0.84)]
         rows = [(0, -0.5), (0, 0.5), (1, -0.5), (1, 0.5)]
         self.ai = []
         for (name, col, skill), (row, off) in zip(specs, rows):
             c = Car(name, col, -SEG_LEN * (4 + 5 * row), off, skill + random.uniform(-0.015, 0.015))
             c.lane = random.choice([-0.6, -0.25, 0.25, 0.6]) if row else off
             self.ai.append(c)
-        self.player = Car("JIJ", (35, 100, 235), -SEG_LEN * (4 + 5 * 2), -0.5, player=True)
+        self.player = Car("YOU", (35, 100, 235), -SEG_LEN * (4 + 5 * 2), -0.5, player=True)
         self.cars = [self.player] + self.ai
         self.state = "ready"
         self.cd = 3.99
@@ -688,10 +587,8 @@ class Game:
         self.parts = []
         self.banners = []
         self.slip = False
-        self.was_boost = False
-        self.boost_fx = 0.0
 
-    # ---- hulp ------------------------------------------------------------
+    # ---- helpers ---------------------------------------------------------
     def signed(self, d):
         L = self.track.length
         return ((d + L / 2) % L) - L / 2
@@ -710,7 +607,7 @@ class Game:
         if len(self.parts) < 450:
             self.parts.append(Particle(x, y, vx, vy, life, col, size, grav, kind))
 
-    # ---- logica ----------------------------------------------------------
+    # ---- logic -----------------------------------------------------------
     def update(self, dt, inp):
         self.t += dt
         if self.paused or self.state in ("ready", "champion"):
@@ -743,14 +640,10 @@ class Game:
         self.order = self.standings()
         pos = self.order.index(self.player) + 1
         if self.state == "racing" and self.race_time > 2 and pos < self.prev_pos:
-            self.say(f"INGEHAALD!  P{pos}", (130, 255, 150))
+            self.say(f"OVERTAKE!  P{pos}", (130, 255, 150))
         self.prev_pos = pos
         seg = self.track.find(self.player.dist)
         self.bg_off += seg.curve * (self.player.speed / MAX_SPEED) * dt * 60 * 0.6
-        target = 1.0 if (self.player.boosting or self.player.boost_t > 0) else 0.0
-        self.boost_fx += (target - self.boost_fx) * min(1.0, dt * 6)
-        if self.state == "finished" and pos <= 3 and random.random() < 0.6:
-            self.confetti(2)
 
     def update_player(self, dt, inp, can_drive):
         p = self.player
@@ -764,30 +657,6 @@ class Game:
                 p.offset += dx
         p.offset -= dx * sp * seg.curve * CENTRIFUGAL
 
-        # nitro
-        p.boosting = bool(can_drive and inp.boost and p.nitro > 0.01 and p.speed > 1500)
-        if p.boosting:
-            p.nitro = max(0.0, p.nitro - dt * 0.33)
-            if not self.was_boost:
-                self.sfx.play("boost")
-        elif can_drive:
-            p.nitro = min(1.0, p.nitro + dt * 0.035)
-        self.was_boost = p.boosting
-        p.boost_t = max(0.0, p.boost_t - dt)
-        boosted = p.boosting or p.boost_t > 0
-        top = MAX_SPEED * (BOOST_MULT if boosted else 1.0)
-
-        # boost-pad
-        if seg.pad is None:
-            p.last_pad = -1
-        elif p.last_pad != seg.pad_id and abs(p.offset - seg.pad) < 0.33:
-            p.last_pad = seg.pad_id
-            p.boost_t = 1.5
-            p.nitro = min(1.0, p.nitro + 0.25)
-            p.speed += 1500
-            self.say("BOOST PAD!", (80, 255, 230))
-            self.sfx.play("pad")
-
         # slipstream
         self.slip = False
         if can_drive and p.speed > 3000:
@@ -796,12 +665,12 @@ class Game:
                 if 200 < dz < 1800 and abs(a.offset - p.offset) < 0.3:
                     self.slip = True
                     p.speed += ACCEL * 0.35 * dt
-                    p.nitro = min(1.0, p.nitro + 0.06 * dt)
                     break
+        top = MAX_SPEED * (SLIP_MULT if self.slip else 1.0)
 
         p.braking = bool(can_drive and inp.down and p.speed > 500)
-        if can_drive and (inp.up or boosted):
-            p.speed += ACCEL * dt * (2.4 if boosted else 1.0)
+        if can_drive and inp.up:
+            p.speed += ACCEL * dt
         elif can_drive and inp.down:
             p.speed += BRAKE * dt
         else:
@@ -812,17 +681,11 @@ class Game:
         p.offset = clamp(p.offset, -2.0, 2.0)
         if p.speed > top:
             p.speed = max(top, p.speed - MAX_SPEED * 0.5 * dt)
-        p.speed = clamp(p.speed, 0, MAX_SPEED * BOOST_MULT)
+        p.speed = clamp(p.speed, 0, MAX_SPEED * SLIP_MULT)
         p.dist += p.speed * dt
 
-        # deeltjes
+        # particles
         px, py, pw = self.player_screen
-        if boosted and p.speed > 1500:
-            for sgn in (-1, 1):
-                for _ in range(2):
-                    self.spawn(px + sgn * pw * 0.22 + random.uniform(-3, 3), py - pw * 0.08,
-                               random.uniform(-40, 40), random.uniform(120, 300), random.uniform(0.25, 0.5),
-                               (255, 210, 90), random.uniform(3, 7), 0, 0)
         if offroad and p.speed > 1500:
             dust = mix(self.cols[0]["grass"], (255, 255, 255), 0.35)
             for sgn in (-1, 1):
@@ -833,24 +696,13 @@ class Game:
     def update_ai(self, car, dt):
         L = self.track.length
         seg = self.track.find(car.dist)
-        car.boost_t = max(0.0, car.boost_t - dt)
-        if seg.pad is None:
-            car.last_pad = -1
-        elif car.last_pad != seg.pad_id and abs(car.offset - seg.pad) < 0.33:
-            car.last_pad = seg.pad_id
-            car.boost_t = 1.3
-        elif car.boost_t <= 0 and random.random() < 0.03 * dt:
-            car.boost_t = 1.0
-        boosted = car.boost_t > 0
         if car.finish_time is not None:
             target = MAX_SPEED * 0.55
         else:
             target = MAX_SPEED * car.skill * (1 - 0.06 * max(0.0, abs(seg.curve) - 2))
             gap = self.signed(self.player.dist - car.dist)
             target *= 1 + 0.05 * clamp(gap / (L * 0.25), -1, 1)
-            if boosted:
-                target *= 1.17
-            target = min(target, MAX_SPEED * (1.2 if boosted else 0.97))
+            target = min(target, MAX_SPEED * 0.97)
 
         LOOK = 6000
         nearest, nd = None, LOOK
@@ -913,11 +765,11 @@ class Game:
                     self.last_lap = t
                     if self.best_lap is None or t < self.best_lap:
                         self.best_lap = t
-                        self.say("SNELLE RONDE!  " + fmt_time(t), (190, 130, 255))
+                        self.say("FASTEST LAP!  " + fmt_time(t), (190, 130, 255))
                     elif laps < TOTAL_LAPS:
-                        self.say(f"RONDE {laps + 1}/{TOTAL_LAPS}", (255, 255, 255))
+                        self.say(f"LAP {laps + 1}/{TOTAL_LAPS}", (255, 255, 255))
                     if laps == TOTAL_LAPS - 1:
-                        self.say("LAATSTE RONDE!", (255, 90, 90))
+                        self.say("FINAL LAP!", (255, 90, 90))
                     self.sfx.play("lap")
                 if c.player:
                     self.lap_start = self.race_time
@@ -934,14 +786,6 @@ class Game:
             self.points[c.name] = self.points.get(c.name, 0) + pts
             self.race_points[c.name] = pts
         self.sfx.play("fin")
-        if self.final_order.index(self.player) < 3:
-            self.confetti(120)
-
-    def confetti(self, n):
-        for _ in range(n):
-            col = random.choice([(255, 80, 80), (255, 220, 60), (80, 220, 120), (80, 160, 255), (230, 110, 255)])
-            self.spawn(random.uniform(0, W), random.uniform(-60, 0), random.uniform(-60, 60),
-                       random.uniform(60, 200), random.uniform(3, 5), col, 4, 90, 3)
 
     def update_particles(self, dt):
         for p in self.parts:
@@ -954,9 +798,9 @@ class Game:
     def update_audio(self):
         p = self.player
         active = self.state in ("countdown", "racing", "finished") and not self.paused
-        self.sfx.engine(active, clamp(p.speed / (MAX_SPEED * BOOST_MULT), 0, 1), p.boosting)
+        self.sfx.engine(active, clamp(p.speed / (MAX_SPEED * SLIP_MULT), 0, 1))
 
-    # ---- tekenen ---------------------------------------------------------
+    # ---- drawing ---------------------------------------------------------
     def text(self, s, font, color, pos, anchor="topleft", shadow=True):
         img = font.render(s, True, color)
         r = img.get_rect(**{anchor: pos})
@@ -996,7 +840,6 @@ class Game:
         maxy = H
         x, dx = 0.0, -base.curve * base_pct
         poly = pygame.draw.polygon
-        blink = int(self.t * 10)
         for n in range(DRAW_DIST):
             seg = segs[(base.index + n) % N]
             camz = pos - (L if seg.index < base.index else 0)
@@ -1018,10 +861,6 @@ class Game:
             poly(scr, rc, [(x1 - w1 - r1, y1), (x1 - w1, y1), (x2 - w2, y2), (x2 - w2 - r2, y2)])
             poly(scr, rc, [(x1 + w1 + r1, y1), (x1 + w1, y1), (x2 + w2, y2), (x2 + w2 + r2, y2)])
             poly(scr, mix(col["road"], fogc, f), [(x1 - w1, y1), (x1 + w1, y1), (x2 + w2, y2), (x2 - w2, y2)])
-            if seg.pad is not None:
-                a, b = seg.pad - 0.3, seg.pad + 0.3
-                pc = (0, 255, 220) if (seg.index // 2 + blink) % 2 else (255, 255, 255)
-                poly(scr, mix(pc, fogc, f), [(x1 + w1 * a, y1), (x1 + w1 * b, y1), (x2 + w2 * b, y2), (x2 + w2 * a, y2)])
             if seg.index < 2:
                 for c in range(8):
                     cc = (235, 235, 235) if (c + seg.index) % 2 == 0 else (25, 25, 25)
@@ -1043,7 +882,7 @@ class Game:
         if self.cone is not None:
             scr.blit(self.cone, (0, 0), special_flags=pygame.BLEND_RGB_ADD)
 
-        # sprites van ver naar dichtbij
+        # sprites from far to near
         buckets = {}
         for c in self.ai:
             buckets.setdefault(track.index_of(c.dist), []).append(c)
@@ -1062,12 +901,8 @@ class Game:
                     sx = s1[0] + s1[3] * off * ROAD_W * W / 2
                     if kind == "tree":
                         draw_tree(scr, sx, s1[1], s1[3] * 1300 * W / 2, var, th["trees"], f, fogc)
-                    elif kind == "lamp":
-                        draw_lamp(scr, sx, s1[1], s1[3] * 600 * W / 2, th["night"], f, fogc)
-                    elif kind == "board":
-                        draw_board(scr, sx, s1[1], s1[3] * 1500 * W / 2, var, f, fogc)
                     else:
-                        draw_sign(scr, sx, s1[1], s1[3] * 520 * W / 2, var)
+                        draw_lamp(scr, sx, s1[1], s1[3] * 600 * W / 2, th["night"], f, fogc)
                 if seg.index == 0:
                     self.draw_gantry(s1)
             if cars_here:
@@ -1079,19 +914,17 @@ class Game:
                     scale = lerp(s1[3], s2[3], pct)
                     sx = lerp(s1[0], s2[0], pct) + scale * c.offset * ROAD_W * W / 2
                     sy = lerp(s1[1], s2[1], pct)
-                    draw_car(scr, sx, sy, scale * CAR_W * ROAD_W * W / 2, c.color,
-                             flame=1.0 if c.boost_t > 0 else 0.0, neon=th["neon"])
+                    draw_car(scr, sx, sy, scale * CAR_W * ROAD_W * W / 2, c.color, neon=th["neon"])
         scr.set_clip(None)
 
-        # speler
+        # player
         scale = CAM_DEPTH / PLAYER_Z
         py = H / 2 - scale * (player_y - cam_y) * H / 2 - 14
         shake = random.uniform(-4, 4) if self.shake > 0 else 0
         bounce = random.uniform(0, 2 + (4 if abs(p.offset) > 1 else 0)) * (p.speed / MAX_SPEED)
         pw = scale * CAR_W * ROAD_W * W / 2
         self.player_screen = (W / 2 + shake, py - bounce, pw)
-        draw_car(scr, W / 2 + shake, py - bounce, pw, p.color,
-                 flame=1.0 if (p.boosting or p.boost_t > 0) else 0.0, neon=th["neon"], braking=p.braking)
+        draw_car(scr, W / 2 + shake, py - bounce, pw, p.color, neon=th["neon"], braking=p.braking)
 
         self.draw_particles()
         self.draw_fx()
@@ -1118,32 +951,25 @@ class Game:
         scr = self.screen
         for p in self.parts:
             k = p.life / p.max
-            if p.kind == 0:
-                pygame.draw.circle(scr, mix(p.col, (160, 25, 10), 1 - k), (int(p.x), int(p.y)), max(1, int(p.size * (0.4 + k))))
-            elif p.kind == 1:
+            if p.kind == 1:
                 pygame.draw.circle(scr, p.col, (int(p.x), int(p.y)), max(1, int(p.size * (0.4 + k))))
-            elif p.kind == 2:
-                pygame.draw.line(scr, p.col, (p.x, p.y), (p.x - p.vx * 0.035, p.y - p.vy * 0.035), 2)
             else:
-                pygame.draw.rect(scr, p.col, (int(p.x), int(p.y), 6, 4))
+                pygame.draw.line(scr, p.col, (p.x, p.y), (p.x - p.vx * 0.035, p.y - p.vy * 0.035), 2)
 
     def draw_fx(self):
         scr = self.screen
         p = self.player
-        inten = max(self.boost_fx, clamp((p.speed / MAX_SPEED - 0.8) / 0.2, 0, 1) * 0.3)
+        inten = clamp((p.speed / MAX_SPEED - 0.8) / 0.2, 0, 1) * 0.3
         if inten > 0.05 and self.state in ("racing", "finished"):
             cx, cy = W // 2, int(H * 0.47)
             for _ in range(int(6 + 26 * inten)):
                 a = random.uniform(0, math.tau)
                 r0 = random.uniform(200, 420)
                 r1 = r0 + random.uniform(50, 200) * (0.5 + inten)
-                col = (200, 225, 255) if self.boost_fx > 0.3 else (170, 180, 195)
+                col = (170, 180, 195)
                 pygame.draw.line(scr, col, (cx + math.cos(a) * r0 * 1.45, cy + math.sin(a) * r0 * 0.9),
                                  (cx + math.cos(a) * r1 * 1.45, cy + math.sin(a) * r1 * 0.9), random.choice((1, 2)))
         scr.blit(self.vig, (0, 0))
-        if self.boost_fx > 0.02:
-            self.vig_boost.set_alpha(int(255 * self.boost_fx))
-            scr.blit(self.vig_boost, (0, 0))
 
     def draw_hud(self):
         p = self.player
@@ -1151,16 +977,16 @@ class Game:
         lap = clamp(p.laps_done + 1, 1, TOTAL_LAPS)
 
         self.panel((10, 10, 250, 138))
-        self.text(f"RONDE  {lap}/{TOTAL_LAPS}", self.f_med, (255, 255, 255), (22, 18))
-        self.text(f"POSITIE  {pos_idx}/{len(self.cars)}", self.f_med, (255, 220, 80), (22, 46))
-        self.text(f"TIJD  {fmt_time(self.race_time)}", self.f_small, (230, 230, 230), (22, 80))
-        self.text("BESTE  " + (fmt_time(self.best_lap) if self.best_lap else "--"), self.f_small, (150, 255, 160), (22, 104))
-        self.text("LAATSTE  " + (fmt_time(self.last_lap) if self.last_lap else "--"), self.f_small, (230, 230, 230), (22, 126))
+        self.text(f"LAP  {lap}/{TOTAL_LAPS}", self.f_med, (255, 255, 255), (22, 18))
+        self.text(f"POSITION  {pos_idx}/{len(self.cars)}", self.f_med, (255, 220, 80), (22, 46))
+        self.text(f"TIME  {fmt_time(self.race_time)}", self.f_small, (230, 230, 230), (22, 80))
+        self.text("BEST  " + (fmt_time(self.best_lap) if self.best_lap else "--"), self.f_small, (150, 255, 160), (22, 104))
+        self.text("LAST  " + (fmt_time(self.last_lap) if self.last_lap else "--"), self.f_small, (230, 230, 230), (22, 126))
 
-        # scorebord
+        # scoreboard
         bx, by, bw = W - 280, 10, 270
         self.panel((bx, by, bw, 40 + 30 * len(self.order)))
-        self.text("SCOREBORD", self.f_small, (255, 255, 255), (bx + 12, by + 8))
+        self.text("SCOREBOARD", self.f_small, (255, 255, 255), (bx + 12, by + 8))
         leader = self.order[0]
         for i, c in enumerate(self.order):
             y = by + 38 + i * 30
@@ -1172,12 +998,12 @@ class Game:
             if c.finish_time is not None:
                 right = fmt_time(c.finish_time)
             elif c is leader:
-                right = f"R{clamp(c.laps_done + 1, 1, TOTAL_LAPS)}  LEIDER"
+                right = f"L{clamp(c.laps_done + 1, 1, TOTAL_LAPS)}  LEADER"
             else:
-                right = f"R{clamp(c.laps_done + 1, 1, TOTAL_LAPS)}  +{max(0, int((leader.dist - c.dist) * M_PER_UNIT))}m"
+                right = f"L{clamp(c.laps_done + 1, 1, TOTAL_LAPS)}  +{max(0, int((leader.dist - c.dist) * M_PER_UNIT))}m"
             self.text(right, self.f_small, (210, 230, 255), (bx + bw - 12, y), "topright")
 
-        # voortgangsbalk + thema
+        # progress bar + theme
         px, py_, pw = W // 2 - 220, 22, 440
         self.panel((px - 10, py_ - 12, pw + 20, 26), 110)
         pygame.draw.line(self.screen, (200, 200, 200), (px, py_), (px + pw, py_), 3)
@@ -1192,8 +1018,9 @@ class Game:
 
         self.draw_minimap()
         self.draw_gauge()
-        self.draw_nitro_bar()
         self.draw_banners()
+        if self.slip:
+            self.text("SLIPSTREAM", self.f_med, (255, 230, 120), (W // 2, H - 40), "midtop")
 
     def draw_minimap(self):
         mx, my, mw, mh = 14, H - 150, 150, 136
@@ -1222,14 +1049,11 @@ class Game:
         self.panel((cx - r - 16, cy - r - 16, 2 * r + 32, 2 * r + 32), 140)
         ratio = clamp(p.speed * KMH / KMH_MAX, 0, 1)
         a0, sweep, segs = 150, 240, 40
-        boosted = p.boosting or p.boost_t > 0
         for i in range(segs):
             a_1 = math.radians(a0 + sweep * i / segs)
             a_2 = math.radians(a0 + sweep * (i + 1) / segs - 1.4)
             on = (i + 0.5) / segs <= ratio
             col = mix((60, 220, 120), (255, 70, 50), i / segs) if on else (45, 50, 62)
-            if on and boosted:
-                col = mix(col, (80, 200, 255), 0.6)
             pts = [(cx + math.cos(a_1) * r, cy + math.sin(a_1) * r), (cx + math.cos(a_2) * r, cy + math.sin(a_2) * r),
                    (cx + math.cos(a_2) * (r - 14), cy + math.sin(a_2) * (r - 14)),
                    (cx + math.cos(a_1) * (r - 14), cy + math.sin(a_1) * (r - 14))]
@@ -1238,23 +1062,7 @@ class Game:
         pygame.draw.line(self.screen, (255, 255, 255), (cx, cy), (cx + math.cos(a) * (r - 20), cy + math.sin(a) * (r - 20)), 3)
         pygame.draw.circle(self.screen, (255, 255, 255), (cx, cy), 6)
         self.text(str(int(p.speed * KMH)), self.f_num, (255, 255, 255), (cx, cy + 28), "center")
-        self.text("km/u", self.f_small, (200, 205, 215), (cx, cy + 56), "center")
-
-    def draw_nitro_bar(self):
-        p = self.player
-        bx, by, bw, bh = W // 2 - 160, H - 36, 320, 16
-        self.panel((bx - 10, by - 24, bw + 20, bh + 34), 120)
-        self.text("NITRO", self.f_small, (150, 220, 255), (bx, by - 20))
-        pygame.draw.rect(self.screen, (35, 40, 55), (bx, by, bw, bh), border_radius=8)
-        full = p.nitro > 0.98
-        col = (80, 200, 255) if not (p.boosting or full) else mix((80, 200, 255), (255, 255, 255), 0.5 + 0.5 * math.sin(self.t * 14))
-        if p.nitro > 0.01:
-            pygame.draw.rect(self.screen, col, (bx, by, int(bw * p.nitro), bh), border_radius=8)
-        pygame.draw.rect(self.screen, (200, 210, 230), (bx, by, bw, bh), 2, border_radius=8)
-        if self.slip:
-            self.text("SLIPSTREAM", self.f_small, (255, 230, 120), (bx + bw, by - 20), "topright")
-        elif full and int(self.t * 3) % 2 == 0:
-            self.text("SPATIE!", self.f_small, (255, 255, 255), (bx + bw, by - 20), "topright")
+        self.text("km/h", self.f_small, (200, 205, 215), (cx, cy + 56), "center")
 
     def draw_banners(self):
         for i, (txt, col, t) in enumerate(self.banners):
@@ -1274,15 +1082,15 @@ class Game:
             for off, col in (((-3, 0), (0, 235, 255)), ((3, 0), (255, 50, 210)), ((0, 0), (255, 240, 120))):
                 img = self.f_title.render("TURBO RACER 3D", True, col)
                 self.screen.blit(img, img.get_rect(midtop=(cx + off[0], 120 + off[1])))
-            self.text("ULTRA EDITIE", self.f_med, (255, 255, 255), (cx, 196), "midtop")
-            self.text(f"{RACES} races  -  {TOTAL_LAPS} ronden  -  4 tegenstanders", self.f_med, (190, 215, 255), (cx, 236), "midtop")
-            lines = ["Pijltjes / WASD: gas, rem en sturen", "SPATIE / SHIFT: nitro     M: geluid",
-                     "Rij over de gekleurde boost-pads en in de slipstream!",
-                     "P: pauze     R: opnieuw     ESC: stoppen"]
+            self.text("ULTRA EDITION", self.f_med, (255, 255, 255), (cx, 196), "midtop")
+            self.text(f"{RACES} races  -  {TOTAL_LAPS} laps  -  4 opponents", self.f_med, (190, 215, 255), (cx, 236), "midtop")
+            lines = ["Arrows / WASD: accelerate, brake and steer", "M: sound",
+                     "Stay close behind other cars to catch their slipstream!",
+                     "P: pause     R: restart     ESC: quit"]
             for i, l in enumerate(lines):
                 self.text(l, self.f_small, (210, 220, 235), (cx, 292 + i * 28), "midtop")
             if pygame.time.get_ticks() // 500 % 2:
-                self.text("Druk op ENTER om te starten", self.f_med, (120, 255, 150), (cx, 420), "midtop")
+                self.text("Press ENTER to start", self.f_med, (120, 255, 150), (cx, 420), "midtop")
         elif self.state == "countdown":
             n = int(self.cd) + 1 if self.cd > 0 else 0
             frac = self.cd - int(self.cd) if self.cd > 0 else 0
@@ -1301,16 +1109,16 @@ class Game:
             self.draw_champion()
         if self.paused:
             self.panel((0, 0, W, H), 130)
-            self.text("PAUZE", self.f_title, (255, 255, 255), (cx, H // 2), "center")
+            self.text("PAUSED", self.f_title, (255, 255, 255), (cx, H // 2), "center")
 
     def draw_results(self):
         cx = W // 2
         x0, y0, w, h = cx - 290, 90, 580, 80 + 5 * 42 + 70
         self.panel((x0, y0, w, h), 205)
-        self.text(f"UITSLAG  RACE {self.race_no}/{RACES}", self.f_title, (255, 215, 60), (cx, y0 + 12), "midtop")
+        self.text(f"RESULTS  RACE {self.race_no}/{RACES}", self.f_title, (255, 215, 60), (cx, y0 + 12), "midtop")
         hy = y0 + 78
-        for label, x, anc in (("#", x0 + 20, "topleft"), ("NAAM", x0 + 60, "topleft"), ("TIJD", x0 + 340, "topright"),
-                              ("PUNTEN", x0 + 440, "topright"), ("TOTAAL", x0 + w - 20, "topright")):
+        for label, x, anc in (("#", x0 + 20, "topleft"), ("NAME", x0 + 60, "topleft"), ("TIME", x0 + 340, "topright"),
+                              ("POINTS", x0 + 440, "topright"), ("TOTAL", x0 + w - 20, "topright")):
             self.text(label, self.f_small, (160, 180, 210), (x, hy), anc, shadow=False)
         for i, c in enumerate(self.final_order):
             y = hy + 30 + i * 38
@@ -1319,12 +1127,12 @@ class Game:
             self.text(str(i + 1), self.f_med, (255, 255, 255), (x0 + 20, y))
             pygame.draw.rect(self.screen, c.color, (x0 + 55, y + 4, 18, 18), border_radius=3)
             self.text(c.name, self.f_med, (255, 255, 255), (x0 + 82, y))
-            t = fmt_time(c.finish_time) if c.finish_time is not None else "onderweg..."
+            t = fmt_time(c.finish_time) if c.finish_time is not None else "racing..."
             self.text(t, self.f_small, (230, 230, 230), (x0 + 340, y + 4), "topright")
             self.text(f"+{self.race_points.get(c.name, 0)}", self.f_med, (150, 255, 160), (x0 + 440, y), "topright")
             self.text(str(self.points.get(c.name, 0)), self.f_med, (255, 220, 80), (x0 + w - 20, y), "topright")
         if pygame.time.get_ticks() // 500 % 2:
-            msg = "ENTER: volgende race" if self.race_no < RACES else "ENTER: kampioenschap"
+            msg = "ENTER: next race" if self.race_no < RACES else "ENTER: championship"
             self.text(msg, self.f_med, (120, 255, 150), (cx, y0 + h - 42), "midtop")
 
     def draw_champion(self):
@@ -1332,8 +1140,8 @@ class Game:
         ranking = sorted(self.cars, key=lambda c: -self.points.get(c.name, 0))
         x0, y0, w, h = cx - 290, 70, 580, 480
         self.panel((x0, y0, w, h), 215)
-        self.text("KAMPIOENSCHAP", self.f_title, (255, 215, 60), (cx, y0 + 12), "midtop")
-        # trofee
+        self.text("CHAMPIONSHIP", self.f_title, (255, 215, 60), (cx, y0 + 12), "midtop")
+        # trophy
         gold = (255, 205, 60)
         tx, ty = cx, y0 + 112
         pygame.draw.polygon(self.screen, gold, [(tx - 34, ty - 30), (tx + 34, ty - 30), (tx + 22, ty + 16), (tx - 22, ty + 16)])
@@ -1342,7 +1150,7 @@ class Game:
         pygame.draw.rect(self.screen, gold, (tx - 6, ty + 16, 12, 18))
         pygame.draw.rect(self.screen, gold, (tx - 24, ty + 34, 48, 10), border_radius=3)
         winner = ranking[0]
-        self.text(("JIJ BENT KAMPIOEN!" if winner.player else f"{winner.name.upper()} WINT HET KAMPIOENSCHAP"),
+        self.text(("YOU ARE THE CHAMPION!" if winner.player else f"{winner.name.upper()} WINS THE CHAMPIONSHIP"),
                   self.f_med, (255, 255, 255), (cx, y0 + 168), "midtop")
         for i, c in enumerate(ranking):
             y = y0 + 222 + i * 40
@@ -1351,19 +1159,16 @@ class Game:
             self.text(str(i + 1), self.f_med, (255, 255, 255), (x0 + 28, y))
             pygame.draw.rect(self.screen, c.color, (x0 + 66, y + 4, 18, 18), border_radius=3)
             self.text(c.name, self.f_med, (255, 255, 255), (x0 + 94, y))
-            self.text(f"{self.points.get(c.name, 0)} pnt", self.f_med, (255, 220, 80), (x0 + w - 28, y), "topright")
+            self.text(f"{self.points.get(c.name, 0)} pts", self.f_med, (255, 220, 80), (x0 + w - 28, y), "topright")
         if pygame.time.get_ticks() // 500 % 2:
-            self.text("ENTER: opnieuw beginnen", self.f_med, (120, 255, 150), (cx, y0 + h - 40), "midtop")
-        if winner.player and random.random() < 0.5:
-            self.confetti(3)
-        self.draw_particles()
+            self.text("ENTER: start over", self.f_med, (120, 255, 150), (cx, y0 + h - 40), "midtop")
 
     def draw(self):
         self.render_world()
         self.draw_hud()
         self.draw_overlays()
 
-    # ---- hoofdlus --------------------------------------------------------
+    # ---- main loop -------------------------------------------------------
     def start_race(self):
         self.paused = False
         self.new_race()
@@ -1403,8 +1208,7 @@ class Game:
                     self.handle_key(e.key)
             k = pygame.key.get_pressed()
             inp = Inp(k[pygame.K_UP] or k[pygame.K_w], k[pygame.K_DOWN] or k[pygame.K_s],
-                      k[pygame.K_LEFT] or k[pygame.K_a], k[pygame.K_RIGHT] or k[pygame.K_d],
-                      k[pygame.K_SPACE] or k[pygame.K_LSHIFT] or k[pygame.K_RSHIFT])
+                      k[pygame.K_LEFT] or k[pygame.K_a], k[pygame.K_RIGHT] or k[pygame.K_d])
             self.update(dt, inp)
             self.update_audio()
             self.draw()
