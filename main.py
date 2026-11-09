@@ -250,7 +250,6 @@ class Track:
         self.n = len(self.segs)
         self.length = self.n * SEG_LEN
         self._dress()
-        self._map()
 
     def _seg(self, curve, y):
         self.segs.append(Seg(len(self.segs), self.last_y, y, curve))
@@ -302,22 +301,6 @@ class Track:
                     seg.props.append((side * 1.28, "lamp", 0.0))
             elif i % 20 == 0 and not th["night"]:
                 seg.props.append((-1.22 if (i // 20) % 2 else 1.22, "lamp", 0.0))
-
-    def _map(self):
-        n = self.n
-        hdg, x, y = 0.0, 0.0, 0.0
-        pts = []
-        for s in self.segs:
-            hdg += 2 * math.pi / n + s.curve * 0.0022
-            x += math.cos(hdg)
-            y += math.sin(hdg)
-            pts.append((x, y))
-        ex, ey = pts[-1]
-        pts = [(px - ex * i / n, py - ey * i / n) for i, (px, py) in enumerate(pts)]
-        self.map_pts = pts[::6]
-        self.map_all = pts
-        xs, ys = [p[0] for p in pts], [p[1] for p in pts]
-        self.map_box = (min(xs), min(ys), max(xs), max(ys))
 
     def find(self, z):
         return self.segs[int((z % self.length) // SEG_LEN)]
@@ -546,8 +529,8 @@ class Game:
         self.check_laps()
         self.order = self.standings()
         pos = self.order.index(self.player) + 1
-        if self.state == "racing" and self.race_time > 2 and pos < self.prev_pos:
-            self.say(f"OVERTAKE!  P{pos}", (130, 255, 150))
+        # if self.state == "racing" and self.race_time > 2 and pos < self.prev_pos:
+            # self.say(f"OVERTAKE!  P{pos}", (130, 255, 150))
         self.prev_pos = pos
         seg = self.track.find(self.player.dist)
         self.bg_off += seg.curve * (self.player.speed / MAX_SPEED) * dt * 60 * 0.6
@@ -825,7 +808,6 @@ class Game:
         draw_car(scr, W / 2 + shake, py - bounce, pw, p.color, neon=th["neon"], braking=p.braking)
 
         self.draw_particles()
-        self.draw_fx()
 
     def draw_gantry(self, s1):
         scr = self.screen
@@ -854,20 +836,7 @@ class Game:
             else:
                 pygame.draw.line(scr, p.col, (p.x, p.y), (p.x - p.vx * 0.035, p.y - p.vy * 0.035), 2)
 
-    def draw_fx(self):
-        scr = self.screen
-        p = self.player
-        inten = clamp((p.speed / MAX_SPEED - 0.8) / 0.2, 0, 1) * 0.3
-        if inten > 0.05 and self.state in ("racing", "finished"):
-            cx, cy = W // 2, int(H * 0.47)
-            for _ in range(int(6 + 26 * inten)):
-                a = random.uniform(0, math.tau)
-                r0 = random.uniform(200, 420)
-                r1 = r0 + random.uniform(50, 200) * (0.5 + inten)
-                col = (170, 180, 195)
-                pygame.draw.line(scr, col, (cx + math.cos(a) * r0 * 1.45, cy + math.sin(a) * r0 * 0.9),
-                                 (cx + math.cos(a) * r1 * 1.45, cy + math.sin(a) * r1 * 0.9), random.choice((1, 2)))
-        scr.blit(self.vig, (0, 0))
+        self.screen.blit(self.vig, (0, 0))
 
     def draw_hud(self):
         p = self.player
@@ -881,65 +850,8 @@ class Game:
         self.text("BEST  " + (fmt_time(self.best_lap) if self.best_lap else "--"), self.f_small, (150, 255, 160), (22, 104))
         self.text("LAST  " + (fmt_time(self.last_lap) if self.last_lap else "--"), self.f_small, (230, 230, 230), (22, 126))
 
-        # scoreboard
-        bx, by, bw = W - 280, 10, 270
-        self.panel((bx, by, bw, 40 + 30 * len(self.order)))
-        self.text("SCOREBOARD", self.f_small, (255, 255, 255), (bx + 12, by + 8))
-        leader = self.order[0]
-        for i, c in enumerate(self.order):
-            y = by + 38 + i * 30
-            if c.player:
-                pygame.draw.rect(self.screen, (255, 255, 255), (bx + 4, y - 3, bw - 8, 28), 2, border_radius=4)
-            self.text(str(i + 1), self.f_small, (255, 255, 255), (bx + 14, y))
-            pygame.draw.rect(self.screen, c.color, (bx + 38, y + 2, 16, 16), border_radius=3)
-            self.text(c.name, self.f_small, (255, 255, 255), (bx + 62, y))
-            if c.finish_time is not None:
-                right = fmt_time(c.finish_time)
-            elif c is leader:
-                right = f"L{clamp(c.laps_done + 1, 1, TOTAL_LAPS)}  LEADER"
-            else:
-                right = f"L{clamp(c.laps_done + 1, 1, TOTAL_LAPS)}  +{max(0, int((leader.dist - c.dist) * M_PER_UNIT))}m"
-            self.text(right, self.f_small, (210, 230, 255), (bx + bw - 12, y), "topright")
-
-        # progress bar + theme
-        px, py_, pw = W // 2 - 220, 22, 440
-        self.panel((px - 10, py_ - 12, pw + 20, 26), 110)
-        pygame.draw.line(self.screen, (200, 200, 200), (px, py_), (px + pw, py_), 3)
-        L = self.track.length
-        for c in sorted(self.cars, key=lambda c: c.player):
-            fx = px + pw * ((c.dist % L) / L)
-            pygame.draw.circle(self.screen, c.color, (fx, py_), 8 if c.player else 5)
-            if c.player:
-                pygame.draw.circle(self.screen, (255, 255, 255), (fx, py_), 8, 2)
-        self.text(f"RACE {self.race_no}/{RACES}  -  {self.theme['name']}", self.f_small, (255, 255, 255),
-                  (W // 2, 40), "midtop")
-
-        self.draw_minimap()
         self.draw_gauge()
         self.draw_banners()
-        if self.slip:
-            self.text("SLIPSTREAM", self.f_med, (255, 230, 120), (W // 2, H - 40), "midtop")
-
-    def draw_minimap(self):
-        mx, my, mw, mh = 14, H - 150, 150, 136
-        self.panel((mx, my, mw, mh), 140)
-        x0, y0, x1, y1 = self.track.map_box
-        pad = 14
-        sc = min((mw - 2 * pad) / max(1, x1 - x0), (mh - 2 * pad) / max(1, y1 - y0))
-        ox = mx + mw / 2 - (x0 + x1) / 2 * sc
-        oy = my + mh / 2 - (y0 + y1) / 2 * sc
-        pts = [(ox + u * sc, oy + v * sc) for u, v in self.track.map_pts]
-        pygame.draw.lines(self.screen, (15, 15, 25), True, pts, 7)
-        pygame.draw.lines(self.screen, self.theme["rumble"][0], True, pts, 3)
-        pygame.draw.circle(self.screen, (255, 255, 255), (int(pts[0][0]), int(pts[0][1])), 3)
-        L, n = self.track.length, self.track.n
-        for c in sorted(self.cars, key=lambda c: c.player):
-            i = int(((c.dist % L) / L) * n) % n
-            u, v = self.track.map_all[i]
-            pos = (int(ox + u * sc), int(oy + v * sc))
-            pygame.draw.circle(self.screen, c.color, pos, 6 if c.player else 4)
-            if c.player:
-                pygame.draw.circle(self.screen, (255, 255, 255), pos, 6, 2)
 
     def draw_gauge(self):
         p = self.player
