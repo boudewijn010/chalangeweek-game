@@ -46,20 +46,6 @@ THEMES = [
          rumble=((212, 40, 40), (240, 240, 240)), lane=(228, 228, 228),
          night=False, stars=False, neon=False, skyline=False,
          trees="pine", clouds=(255, 218, 196)),
-    dict(name="NEON NIGHT", sky_top=(6, 3, 38), sky_bot=(185, 35, 165),
-         sun=(255, 90, 205), sun_pos=(0.50, 0.60), sun_r=92,
-         mount=(58, 20, 110), hill=(26, 12, 62),
-         grass=((22, 10, 54), (15, 6, 42)), road=((46, 46, 66), (38, 38, 58)),
-         rumble=((0, 232, 255), (255, 44, 205)), lane=(255, 240, 120),
-         night=True, stars=True, neon=True, skyline=True,
-         trees="neon", clouds=None),
-    dict(name="DESERT", sky_top=(38, 128, 230), sky_bot=(252, 236, 202),
-         sun=(255, 252, 225), sun_pos=(0.25, 0.30), sun_r=44,
-         mount=(205, 150, 118), hill=(196, 142, 92),
-         grass=((228, 188, 112), (212, 172, 96)), road=((124, 112, 106), (112, 102, 98)),
-         rumble=((235, 235, 235), (225, 118, 40)), lane=(244, 232, 200),
-         night=False, stars=False, neon=False, skyline=False,
-         trees="palm", clouds=(255, 255, 255)),
 ]
 
 
@@ -577,7 +563,7 @@ class Game:
         # particles
         px, py, pw = self.player_screen
         if offroad and p.speed > 1500:
-            dust = mix(self.cols[0]["grass"], (255, 255, 255), 0.35)
+            dust = mix(self.cols[0]["d"], (255, 255, 255), 0.35)
             for sgn in (-1, 1):
                 if random.random() < 0.7:
                     self.spawn(px + sgn * pw * 0.45, py - 4, random.uniform(-70, 70), random.uniform(-90, -20),
@@ -893,10 +879,8 @@ class Game:
                 img = self.f_title.render("TURBO RACER 3D", True, col)
                 self.screen.blit(img, img.get_rect(midtop=(cx + off[0], 120 + off[1])))
             self.text("ULTRA EDITION", self.f_med, (255, 255, 255), (cx, 196), "midtop")
-            self.text(f"{RACES} races  -  {TOTAL_LAPS} laps  -  4 opponents", self.f_med, (190, 215, 255), (cx, 236), "midtop")
-            lines = ["Arrows / WASD: accelerate, brake and steer",
-                     "Stay close behind other cars to catch their slipstream!",
-                     "P: pause     R: restart     ESC: quit"]
+            self.text(f"1 race -  {TOTAL_LAPS} laps  -  4 opponents", self.f_med, (190, 215, 255), (cx, 236), "midtop")
+            lines = ["Arrows / WASD: accelerate, brake and steer",]
             for i, l in enumerate(lines):
                 self.text(l, self.f_small, (210, 220, 235), (cx, 292 + i * 28), "midtop")
             if pygame.time.get_ticks() // 500 % 2:
@@ -917,9 +901,6 @@ class Game:
             self.draw_results()
         elif self.state == "champion":
             self.draw_champion()
-        if self.paused:
-            self.panel((0, 0, W, H), 130)
-            self.text("PAUSED", self.f_title, (255, 255, 255), (cx, H // 2), "center")
 
     def draw_results(self):
         cx = W // 2
@@ -980,7 +961,6 @@ class Game:
 
     # ---- main loop -------------------------------------------------------
     def start_race(self):
-        self.paused = False
         self.new_race()
         self.state = "countdown"
 
@@ -1000,8 +980,6 @@ class Game:
                 self.start_race()
         elif key == pygame.K_r and self.state in ("ready", "countdown", "racing"):
             self.start_race()
-        elif key == pygame.K_p and self.state in ("racing", "countdown"):
-            self.paused = not self.paused
 
     def run(self):
         while True:
